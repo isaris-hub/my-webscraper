@@ -62,8 +62,57 @@ def test_download_favicon(tmp_path, monkeypatch):
     assert file_path.read_bytes() == b"ICO"
 
 
+def test_collect_subpages(monkeypatch):
+    import requests
+
+    MAIN_HTML = """
+    <html><body>
+      <a href="/a">A</a>
+      <a href="http://other.com/b">B</a>
+      <a href="/a">A again</a>
+    </body></html>
+    """
+
+    SUB_HTML = """
+    <html><head><title>Sub Title</title></head></html>
+    """
+
+    def fake_get(url):
+        if url == "http://example.com":
+            return DummyResponse(MAIN_HTML)
+        if url == "http://example.com/a":
+            return DummyResponse(SUB_HTML)
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    results = webscraper.collect_subpages("http://example.com")
+    assert results == [("http://example.com/a", "Sub Title")]
+
+
+def test_save_subpages(tmp_path, monkeypatch):
+    def fake_collect(url):
+        return [
+            ("http://example.com/a", "A"),
+            ("http://example.com/b", "B"),
+        ]
+
+    monkeypatch.setattr(webscraper, "collect_subpages", fake_collect)
+
+    results_dir = tmp_path / "results"
+    file_path = webscraper.save_subpages("http://example.com", results_dir)
+
+    expected = "http://example.com/a\tA\nhttp://example.com/b\tB"
+    assert file_path.exists()
+    assert file_path.read_text() == expected
+
+    shutil.rmtree(results_dir)
+    assert not results_dir.exists()
+
+
 def test_main_scrapes_urls_from_file(tmp_path, monkeypatch):
     import requests
+    from urllib.parse import urlparse
 
     urls_file = tmp_path / "urls.txt"
     urls_file.write_text("http://example.com\nhttp://example.org\n", encoding="utf-8")
@@ -76,6 +125,12 @@ def test_main_scrapes_urls_from_file(tmp_path, monkeypatch):
         return DummyResponse(HTML)
 
     monkeypatch.setattr(requests, "get", fake_get)
+
+    def fake_collect(url):
+        domain = urlparse(url).netloc
+        return [(f"http://{domain}/sub", "Sub Title")]
+
+    monkeypatch.setattr(webscraper, "collect_subpages", fake_collect)
     monkeypatch.setattr(
         sys,
         "argv",
@@ -106,6 +161,13 @@ def test_main_scrapes_urls_from_file(tmp_path, monkeypatch):
     assert favicon2.exists()
     assert favicon1.read_bytes() == b"ICO"
     assert favicon2.read_bytes() == b"ICO"
+
+    sub1 = results_dir / "subpages_example.com.txt"
+    sub2 = results_dir / "subpages_example.org.txt"
+    assert sub1.exists()
+    assert sub2.exists()
+    assert sub1.read_text() == "http://example.com/sub\tSub Title"
+    assert sub2.read_text() == "http://example.org/sub\tSub Title"
 
     shutil.rmtree(results_dir)
     shutil.rmtree(favicons_dir)
