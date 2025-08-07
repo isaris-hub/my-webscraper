@@ -2,7 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import argparse
 from pathlib import Path
-from urllib.parse import urlparse
+from typing import List, Tuple
+from urllib.parse import urlparse, urljoin
 
 
 def fetch_headlines(url: str, selector: str):
@@ -37,6 +38,45 @@ def download_favicon(url: str, favicons_dir: Path):
     resp.raise_for_status()
     file_path = favicons_dir / f"{parsed.netloc}.ico"
     file_path.write_bytes(resp.content)
+    return file_path
+
+
+def collect_subpages(url: str) -> List[Tuple[str, str]]:
+    """Return a list of tuples with subpage URLs and their titles."""
+    resp = requests.get(url)
+    resp.raise_for_status()
+    soup = BeautifulSoup(resp.text, "html.parser")
+    base_domain = urlparse(url).netloc
+    visited = set()
+    results: List[Tuple[str, str]] = []
+    for tag in soup.find_all("a", href=True):
+        link = urljoin(url, tag["href"])
+        if urlparse(link).netloc != base_domain:
+            continue
+        if link in visited:
+            continue
+        visited.add(link)
+        try:
+            page = requests.get(link)
+            page.raise_for_status()
+            page_soup = BeautifulSoup(page.text, "html.parser")
+            title_tag = page_soup.find("title")
+            title = title_tag.get_text(strip=True) if title_tag else ""
+            results.append((link, title))
+        except Exception:
+            continue
+    return results
+
+
+def save_subpages(url: str, results_dir: Path):
+    """Save subpage URLs and titles for a domain into results_dir."""
+    subpages = collect_subpages(url)
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    domain = urlparse(url).netloc
+    file_path = results_dir / f"subpages_{domain}.txt"
+    lines = [f"{link}\t{title}" for link, title in subpages]
+    file_path.write_text("\n".join(lines), encoding="utf-8")
     return file_path
 
 
@@ -93,10 +133,17 @@ def main():
         try:
             output_file = save_headlines(url, args.selector, args.results_dir)
             print(f"Saved headlines from {url} to {output_file}")
+            subpages_file = save_subpages(url, args.results_dir)
+            print(f"Saved subpages from {url} to {subpages_file}")
+        except Exception as e:
+            print(f"Error scraping {url}: {e}")
+            continue
+
+        try:
             favicon_file = download_favicon(url, args.favicons_dir)
             print(f"Saved favicon from {url} to {favicon_file}")
         except Exception as e:
-            print(f"Error scraping {url}: {e}")
+            print(f"Error downloading favicon from {url}: {e}")
 
 
 if __name__ == "__main__":
