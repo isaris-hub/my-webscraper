@@ -2,6 +2,10 @@ import os
 import requests
 from bs4 import BeautifulSoup
 import argparse
+
+
+from pathlib import Path
+
 from urllib.parse import urlparse
 
 def fetch_headlines(url: str, selector: str):
@@ -13,6 +17,17 @@ def fetch_headlines(url: str, selector: str):
     soup = BeautifulSoup(resp.text, 'html.parser')
     elements = soup.select(selector)
     return [el.get_text(strip=True) for el in elements]
+
+
+def save_headlines(url: str, selector: str, results_dir: Path):
+    """Fetch headlines and save them to a domain-named file in results_dir."""
+    headlines = fetch_headlines(url, selector)
+    results_dir = Path(results_dir)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    domain = urlparse(url).netloc
+    file_path = results_dir / f"{domain}.txt"
+    file_path.write_text("\n".join(headlines), encoding="utf-8")
+    return file_path
 
 def main():
     parser = argparse.ArgumentParser(description="Simple headline scraper")
