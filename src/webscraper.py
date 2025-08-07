@@ -1,6 +1,8 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 import argparse
+from urllib.parse import urlparse
 
 def fetch_headlines(url: str, selector: str):
     """
@@ -24,6 +26,13 @@ def main():
 
     try:
         headlines = fetch_headlines(args.url, args.selector)
+        domain = urlparse(args.url).netloc
+        os.makedirs("results", exist_ok=True)
+        try:
+            with open(os.path.join("results", f"{domain}.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(headlines))
+        except OSError as e:
+            print(f"Error writing file: {e}")
         if not headlines:
             print("No headlines found with that selector.")
         else:
