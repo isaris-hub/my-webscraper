@@ -27,6 +27,19 @@ def save_headlines(url: str, selector: str, results_dir: Path):
     return file_path
 
 
+def download_favicon(url: str, favicons_dir: Path):
+    """Download the favicon for the given URL into favicons_dir."""
+    favicons_dir = Path(favicons_dir)
+    favicons_dir.mkdir(parents=True, exist_ok=True)
+    parsed = urlparse(url)
+    favicon_url = f"{parsed.scheme}://{parsed.netloc}/favicon.ico"
+    resp = requests.get(favicon_url)
+    resp.raise_for_status()
+    file_path = favicons_dir / f"{parsed.netloc}.ico"
+    file_path.write_bytes(resp.content)
+    return file_path
+
+
 def read_urls(file_path: Path):
     """Return a list of URLs read from a text file, ignoring blank lines."""
     file_path = Path(file_path)
@@ -40,6 +53,7 @@ def read_urls(file_path: Path):
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEFAULT_URLS_FILE = BASE_DIR / "input" / "urls.txt"
 DEFAULT_RESULTS_DIR = BASE_DIR / "results"
+DEFAULT_FAVICONS_DIR = BASE_DIR / "favicons"
 
 
 def main():
@@ -61,6 +75,12 @@ def main():
         type=Path,
         help="Directory to store results (default: results)",
     )
+    parser.add_argument(
+        "--favicons-dir",
+        default=DEFAULT_FAVICONS_DIR,
+        type=Path,
+        help="Directory to store favicons (default: favicons)",
+    )
     args = parser.parse_args()
 
     try:
@@ -73,6 +93,8 @@ def main():
         try:
             output_file = save_headlines(url, args.selector, args.results_dir)
             print(f"Saved headlines from {url} to {output_file}")
+            favicon_file = download_favicon(url, args.favicons_dir)
+            print(f"Saved favicon from {url} to {favicon_file}")
         except Exception as e:
             print(f"Error scraping {url}: {e}")
 
