@@ -91,20 +91,39 @@ def test_collect_subpages(monkeypatch):
 
 
 def test_save_subpages(tmp_path, monkeypatch):
-    def fake_collect(url):
-        return [
-            ("http://example.com/a", "A"),
-            ("http://example.com/b", "B"),
-        ]
+    import requests
 
-    monkeypatch.setattr(webscraper, "collect_subpages", fake_collect)
+    MAIN_HTML = """
+    <html><body>
+      <a href="/a">A</a>
+      <a href="/b">B</a>
+    </body></html>
+    """
+    SUB_HTML_A = "<html><head><title>Title A</title></head></html>"
+    SUB_HTML_B = "<html><head><title>Title B</title></head></html>"
+
+    def fake_get(url):
+        if url == "http://example.com":
+            return DummyResponse(MAIN_HTML)
+        if url == "http://example.com/a":
+            return DummyResponse(SUB_HTML_A)
+        if url == "http://example.com/b":
+            return DummyResponse(SUB_HTML_B)
+        raise AssertionError(f"Unexpected URL {url}")
+
+    monkeypatch.setattr(requests, "get", fake_get)
 
     results_dir = tmp_path / "results"
     file_path = webscraper.save_subpages("http://example.com", results_dir)
 
-    expected = "http://example.com/a\tA\nhttp://example.com/b\tB"
-    assert file_path.exists()
-    assert file_path.read_text() == expected
+    output_file = results_dir / "subpages_example.com.txt"
+    expected = (
+        "http://example.com/a\tTitle A\n"
+        "http://example.com/b\tTitle B"
+    )
+    assert file_path == output_file
+    assert output_file.exists()
+    assert output_file.read_text() == expected
 
     shutil.rmtree(results_dir)
     assert not results_dir.exists()
