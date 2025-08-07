@@ -133,12 +133,17 @@ def main():
         try:
             output_file = save_headlines(url, args.selector, args.results_dir)
             print(f"Saved headlines from {url} to {output_file}")
-            favicon_file = download_favicon(url, args.favicons_dir)
-            print(f"Saved favicon from {url} to {favicon_file}")
             subpages_file = save_subpages(url, args.results_dir)
             print(f"Saved subpages from {url} to {subpages_file}")
         except Exception as e:
             print(f"Error scraping {url}: {e}")
+            continue
+
+        try:
+            favicon_file = download_favicon(url, args.favicons_dir)
+            print(f"Saved favicon from {url} to {favicon_file}")
+        except Exception as e:
+            print(f"Error downloading favicon from {url}: {e}")
 
 
 if __name__ == "__main__":

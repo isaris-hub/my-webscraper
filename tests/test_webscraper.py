@@ -193,3 +193,55 @@ def test_main_scrapes_urls_from_file(tmp_path, monkeypatch):
     assert not results_dir.exists()
     assert not favicons_dir.exists()
 
+
+def test_main_saves_results_without_favicon(tmp_path, monkeypatch):
+    import requests
+    from urllib.parse import urlparse
+
+    urls_file = tmp_path / "urls.txt"
+    urls_file.write_text("http://example.com\n", encoding="utf-8")
+    results_dir = tmp_path / "results"
+    favicons_dir = tmp_path / "favicons"
+
+    monkeypatch.setattr(requests, "get", lambda url: DummyResponse(HTML))
+
+    def fake_collect(url):
+        domain = urlparse(url).netloc
+        return [(f"http://{domain}/sub", "Sub Title")]
+
+    monkeypatch.setattr(webscraper, "collect_subpages", fake_collect)
+
+    def fake_download(url, fav_dir):
+        raise Exception("favicon missing")
+
+    monkeypatch.setattr(webscraper, "download_favicon", fake_download)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "webscraper",
+            "--urls-file",
+            str(urls_file),
+            "--results-dir",
+            str(results_dir),
+            "--favicons-dir",
+            str(favicons_dir),
+        ],
+    )
+
+    webscraper.main()
+
+    output_file = results_dir / "example.com.txt"
+    subpages_file = results_dir / "subpages_example.com.txt"
+    assert output_file.exists()
+    assert subpages_file.exists()
+    assert output_file.read_text() == "First Headline\nSecond Headline"
+    assert subpages_file.read_text() == "http://example.com/sub\tSub Title"
+    assert not (favicons_dir / "example.com.ico").exists()
+
+    shutil.rmtree(results_dir)
+    assert not results_dir.exists()
+    if favicons_dir.exists():
+        shutil.rmtree(favicons_dir)
+        assert not favicons_dir.exists()
+
